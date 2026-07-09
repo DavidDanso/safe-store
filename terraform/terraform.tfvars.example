@@ -1,0 +1,6 @@
+primary_region     = "us-east-1"
+backup_region      = "eu-west-1"
+project_name       = "safestore"
+environment        = "test"
+account_id         = "YOUR_ACCOUNT_ID_HERE"
+alarm_threshold_gb = 1
