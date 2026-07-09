@@ -13,7 +13,7 @@ resource "aws_s3_bucket_replication_configuration" "safestore" {
     status = "Enabled"
 
     delete_marker_replication {
-      status = "Enabled"
+      status = "Disabled"
     }
 
     destination {
