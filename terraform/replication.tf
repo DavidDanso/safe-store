@@ -12,6 +12,8 @@ resource "aws_s3_bucket_replication_configuration" "safestore" {
     id     = "safestore-replication-rule"
     status = "Enabled"
 
+    filter {}
+
     delete_marker_replication {
       status = "Disabled"
     }
