@@ -60,20 +60,6 @@ resource "aws_s3_bucket_policy" "safestore_backup" {
         }
       },
       {
-        Sid    = "AllowReplicationRolePut"
-        Effect = "Allow"
-        Principal = {
-          AWS = aws_iam_role.safestore_replication.arn
-        }
-        Action = [
-          "s3:ReplicateObject",
-          "s3:ReplicateDelete",
-          "s3:ReplicateTags",
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.safestore_backup.arn}/*"
-      },
-      {
         Sid       = "DenyPutObjectExceptReplicationRole"
         Effect    = "Deny"
         Principal = "*"
@@ -122,6 +108,12 @@ resource "aws_s3_bucket_policy" "safestore_logs" {
         Condition = {
           StringEquals = {
             "aws:SourceAccount" = var.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = [
+              aws_s3_bucket.safestore_primary.arn,
+              aws_s3_bucket.safestore_backup.arn
+            ]
           }
         }
       }

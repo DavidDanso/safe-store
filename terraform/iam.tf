@@ -20,6 +20,7 @@ resource "aws_iam_role" "safestore_replication" {
 resource "aws_iam_policy" "safestore_replication" {
   name        = "safestore-replication-policy"
   description = "IAM policy for S3 cross-region replication"
+  tags        = local.common_tags
 
   policy = jsonencode({
     Version = "2012-10-17"
