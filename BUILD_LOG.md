@@ -15,7 +15,8 @@ Log of all terraform runs and deployment activities.
   - Decision: added a second logs bucket (`safestore_logs_backup`), deployed in the backup region via `provider = aws.backup`, with its own encryption, public access block, and policy (mirrors the primary logs bucket pattern). Backup's `aws_s3_bucket_logging` resource repointed to this new bucket. See ADR-004.
 - Replication configuration: failed second time (different error) — `MissingRequestBodyError: Request Body is empty`. Root cause: Terraform's automatic dependency graph didn't wait for both buckets' versioning to be fully settled on AWS's side before sending the replication config, since bucket, versioning, and replication were all being created in the same apply. Fixed by adding an explicit `depends_on = [aws_s3_bucket_versioning.safestore_primary, aws_s3_bucket_versioning.safestore_backup]` to the replication resource, forcing correct ordering.
 - Linked primary bucket to backup bucket via `aws_s3_bucket_replication_configuration`, using the IAM replication role built in `iam.tf`. Role/policy/attachment required to exist first — dependency confirmed correct, no changes needed there.
-- `terraform apply` succeeded after the `depends_on` fix. Both errors caught and resolved at `apply` time, no partial/broken state left behind.
+- `terraform apply` succeeded after the `depends_on` fix.
+- Replication verified end-to-end: uploaded `test/replication-check.txt` to primary via `put-object` with `--server-side-encryption AES256`, waited, then confirmed the same key exists in backup via `head-object`. Both succeeded — replication is confirmed working, not just configured.
 
 ## Day 3 — Logging & Lifecycle Policies, Verification
 
