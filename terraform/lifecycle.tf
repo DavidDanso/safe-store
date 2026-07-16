@@ -1,52 +1,52 @@
-# resource "aws_s3_bucket_lifecycle_configuration" "safestore_primary" {
-#   bucket = aws_s3_bucket.safestore_primary.id
+resource "aws_s3_bucket_lifecycle_configuration" "safestore_primary" {
+  bucket = aws_s3_bucket.safestore_primary.id
 
-#   rule {
-#     id     = "expire-noncurrent-versions"
-#     status = "Enabled"
-#     filter {}
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+    filter {}
 
-#     noncurrent_version_expiration {
-#       noncurrent_days = 30
-#     }
-#   }
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
 
-#   rule {
-#     id     = "clean-up-delete-markers"
-#     status = "Enabled"
-#     filter {}
+  rule {
+    id     = "clean-up-delete-markers"
+    status = "Enabled"
+    filter {}
 
-#     expiration {
-#       expired_object_delete_marker = true
-#     }
-#   }
-# }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+}
 
-# resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
-#   provider = aws.backup
-#   bucket   = aws_s3_bucket.safestore_backup.id
+resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
+  provider = aws.backup
+  bucket   = aws_s3_bucket.safestore_backup.id
 
-#   rule {
-#     id     = "expire-backup-noncurrent-versions"
-#     status = "Enabled"
-#     filter {}
+  rule {
+    id     = "expire-backup-noncurrent-versions"
+    status = "Enabled"
+    filter {}
 
-#     noncurrent_version_expiration {
-#       noncurrent_days = 30
-#     }
-#   }
-# }
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
 
-# resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs" {
-#   bucket = aws_s3_bucket.safestore_logs.id
+resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs" {
+  bucket = aws_s3_bucket.safestore_logs.id
 
-#   rule {
-#     id     = "expire-old-logs"
-#     status = "Enabled"
-#     filter {}
+  rule {
+    id     = "expire-old-logs"
+    status = "Enabled"
+    filter {}
 
-#     expiration {
-#       days = 90
-#     }
-#   }
-# }
+    expiration {
+      days = 90
+    }
+  }
+}
