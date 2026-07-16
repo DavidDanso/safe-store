@@ -12,7 +12,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_primary" {
   }
 
   rule {
-    id     = "clean-up-delete-markers"
+    id     = "clean-up-primary-delete-markers"
     status = "Enabled"
     filter {}
 
@@ -33,6 +33,16 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
 
     noncurrent_version_expiration {
       noncurrent_days = 30
+    }
+  }
+
+  rule {
+    id     = "clean-up-backup-delete-markers"
+    status = "Enabled"
+    filter {}
+
+    expiration {
+      expired_object_delete_marker = true
     }
   }
 }
