@@ -50,3 +50,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs" {
     }
   }
 }
+
+resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs_backup" {
+  provider = aws.backup
+  bucket   = aws_s3_bucket.safestore_logs_backup.id
+
+  rule {
+    id     = "expire-old-logs-backup"
+    status = "Enabled"
+    filter {}
+
+    expiration {
+      days = 90
+    }
+  }
+}
