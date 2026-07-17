@@ -4,19 +4,45 @@ Log of all terraform runs and deployment activities.
 
 ## Day 1 — Primary Bucket
 
-- Plain-HTTP PutObject test: failed first try, `Resource` in EnforceHTTPS policy was missing the `/*` object ARN. Fixed by adding both bucket and object ARNs.
-- Encryption header deny test: passed first try.
-- Confirmed SSE-S3 via `head-object` — `ServerSideEncryption: AES256`.
+versioning/encryption/PAB — no issues, straight in.
+
+policy took longer than it should have. ran the http deny test, expected
+AccessDenied, got a successful upload instead. spent like 10 min confused
+before noticing my Resource array on EnforceHTTPS only had the bucket arn,
+not the /* object arn too. added it, retested, denied. ok.
+
+encryption header deny — fine first try.
+
+uploaded test file, head-object shows ServerSideEncryption: AES256. good.
 
 ## Day 2 — Backup Bucket, Replication & IAM Role
 
-- Replication configuration: failed first try — `InvalidRequest: DeleteMarkerReplication must be specified for this version of Cross Region Replication configuration schema`. AWS's replication API requires this field explicitly, even to turn it off. Fixed by adding `delete_marker_replication { status = "Disabled" }` to the rule block — matches ADR-001 (delete markers not replicated), now stated explicitly instead of implied.
-- Backup bucket logging: failed first try — `CrossLocationLoggingProhibitted: Cross S3 location logging not allowed`. S3 requires the logs bucket to be in the same region as the bucket it's logging. Original design used one logs bucket in the primary region for both primary and backup — doesn't work cross-region.
-  - Decision: added a second logs bucket (`safestore_logs_backup`), deployed in the backup region via `provider = aws.backup`, with its own encryption, public access block, and policy (mirrors the primary logs bucket pattern). Backup's `aws_s3_bucket_logging` resource repointed to this new bucket. See ADR-004.
-- Replication configuration: failed second time (different error) — `MissingRequestBodyError: Request Body is empty`. Root cause: Terraform's automatic dependency graph didn't wait for both buckets' versioning to be fully settled on AWS's side before sending the replication config, since bucket, versioning, and replication were all being created in the same apply. Fixed by adding an explicit `depends_on = [aws_s3_bucket_versioning.safestore_primary, aws_s3_bucket_versioning.safestore_backup]` to the replication resource, forcing correct ordering.
-- Linked primary bucket to backup bucket via `aws_s3_bucket_replication_configuration`, using the IAM replication role built in `iam.tf`. Role/policy/attachment required to exist first — dependency confirmed correct, no changes needed there.
-- `terraform apply` succeeded after the `depends_on` fix.
-- Replication verified end-to-end: uploaded `test/replication-check.txt` to primary via `put-object` with `--server-side-encryption AES256`, waited, then confirmed the same key exists in backup via `head-object`. Both succeeded — replication is confirmed working, not just configured.
+rough day.
+
+replication config #1: InvalidRequest, DeleteMarkerReplication must be
+specified. didn't know this was mandatory even to disable it. added
+delete_marker_replication { status = "Disabled" }. matches ADR-001 anyway
+so not a real change, just had to make it explicit in code.
+
+logging: CrossLocationLoggingProhibitted. did not know logs bucket has to
+be same-region as whatever it's logging. original plan (one logs bucket)
+doesn't work. had to decide — drop backup logging entirely (it's a SHOULD
+not MUST) or spin up a second logs bucket in eu-west-1. went with the
+second bucket, didn't like the idea of backup being a total blind spot.
+-> ADR-004
+
+replication config #2, different error this time: MissingRequestBodyError,
+empty request body. this one was annoying because nothing looked wrong.
+turned out to be a race — versioning wasn't fully done propagating before
+replication config got sent, since everything was in the same apply. added
+depends_on for both versioning resources. fixed.
+
+apply finally clean.
+
+didn't trust "apply succeeded" = replication actually works, so tested for
+real: put-object to primary w/ sse flag, waited ~3 min, head-object on
+backup for the same key. it was there. confirmed, not assumed.
 
 ## Day 3 — Logging & Lifecycle Policies, Verification
 
+[pending]
