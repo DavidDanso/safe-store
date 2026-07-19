@@ -1,7 +1,3 @@
-# Build Log
-Log of all terraform runs and deployment activities.
-
-
 ## Day 1 — Primary Bucket
 
 versioning/encryption/PAB — no issues, straight in.
@@ -14,6 +10,16 @@ not the /* object arn too. added it, retested, denied. ok.
 encryption header deny — fine first try.
 
 uploaded test file, head-object shows ServerSideEncryption: AES256. good.
+
+console upload test (separate from CLI test above): tried uploading
+aws-cert.png through the S3 console normally, got Access denied. turned out
+the console's default upload doesn't send the x-amz-server-side-encryption
+header — it relies on the bucket's default encryption instead, which my
+policy doesn't check for, only the header in the request itself. fix: in
+the upload screen, Properties > Server-side encryption settings > switch
+from "use bucket default" to "override" > SSE-S3. re-uploaded, worked.
+good real-world proof of the tradeoff from choosing the strict header-check
+policy over relying on default encryption alone.
 
 ## Day 2 — Backup Bucket, Replication & IAM Role
 
