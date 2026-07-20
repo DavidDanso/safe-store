@@ -142,18 +142,3 @@ resource "aws_s3_bucket_replication_configuration" "replication" {
     }
   }
 }
-
-# Route primary bucket logs to the logs bucket
-resource "aws_s3_bucket_logging" "primary" {
-  bucket        = aws_s3_bucket.safestore_primary.id
-  target_bucket = aws_s3_bucket.safestore_logs.id
-  target_prefix = "log/primary/"
-}
-
-# Route backup bucket logs to the logs bucket
-resource "aws_s3_bucket_logging" "backup" {
-  provider      = aws.backup
-  bucket        = aws_s3_bucket.safestore_backup.id
-  target_bucket = aws_s3_bucket.safestore_logs_backup.id
-  target_prefix = "log/backup/"
-}
