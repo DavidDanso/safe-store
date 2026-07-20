@@ -13,3 +13,4 @@ venv/
 *.swp
 
 *.txt
+*.bin
