@@ -1,3 +1,7 @@
+# Build Log
+Log of all terraform runs and deployment activities.
+
+
 ## Day 1 — Primary Bucket
 
 versioning/encryption/PAB — no issues, straight in.
@@ -21,7 +25,8 @@ from "use bucket default" to "override" > SSE-S3. re-uploaded, worked.
 good real-world proof of the tradeoff from choosing the strict header-check
 policy over relying on default encryption alone.
 
-## Day 2 — Backup Bucket, Replication & IAM Role
+
+## Day 2 — Backup Bucket & Replication
 
 rough day.
 
@@ -49,6 +54,82 @@ didn't trust "apply succeeded" = replication actually works, so tested for
 real: put-object to primary w/ sse flag, waited ~3 min, head-object on
 backup for the same key. it was there. confirmed, not assumed.
 
-## Day 3 — Logging & Lifecycle Policies, Verification
 
-[pending]
+## Day 3 — Lifecycle, Alarm & Scripts
+
+### Slice 1 — Lifecycle rules
+
+wrote two separate rules for primary (noncurrent version expiration +
+delete marker cleanup) instead of jamming both into one rule — id on a
+combined rule would've been misleading, and AWS evaluates them the same
+either way so no reason to combine.
+
+caught myself missing the delete-marker rule on backup — only had
+noncurrent version expiration there. FR7 says both rules on both buckets,
+not just primary. added it.
+
+while looking at backup's lockdown, realized the policy only denied
+PutObject, not DeleteObject/DeleteObjectVersion. if backup's supposed to
+be fully read-only, someone could still delete straight from it and leave
+a delete marker sitting there forever with nothing cleaning it up.
+hardened the policy to deny all three write-type actions, not just
+PutObject.
+
+same thing occurred to me about the logs bucket — nothing was stopping me
+from uploading straight into it myself. added a deny statement blocking
+everyone except the logging service, same idea as backup's lockout but
+using aws:PrincipalServiceName since the trusted party here is a service,
+not a role. double-checked the negated-operator behavior before trusting
+it — StringNotEquals with a missing key evaluates true (denies), which is
+what you want, confirmed against AWS docs since this isn't obvious.
+
+did a live test with real data before starting the scripts — 3mb file
+instead of the kb-sized synthetic ones. dropped lifecycle timers to 1 day
+temporarily so i wasn't waiting a month to see cleanup actually happen.
+upload, encryption check, replication check, delete + verify delete
+marker — all fine.
+
+tried cleaning the test file out of backup afterward through the console,
+got denied — DeleteObjectVersion, explicit deny, resource policy. took a
+second to realize that's my own hardened policy doing exactly what it's
+supposed to, not a bug. left the file, lifecycle will clean it up once
+timers are back to normal.
+
+lifecycle timers still on 1 day — need to flip back to 30/90 before Day 4.
+
+### Slice 2 — CloudWatch alarm
+
+primary alarm straightforward, 1GB threshold, way above anything test
+files will hit.
+
+added one for backup too, even though PRD only asked for primary.
+reasoning: delete markers aren't replicated (ADR-001), so backup can hold
+onto stuff primary's already cleaned up — sizes can diverge over time,
+so primary-only monitoring could miss something abnormal happening
+specifically on backup. free to add, so did it. worth a line in an ADR
+since it's extending scope on purpose, not just extra effort for its own
+sake.
+
+caught a bug before applying — backup alarm had no provider = aws.backup
+set, so it would've been created in the wrong region entirely.
+CloudWatch metrics are regional, and BucketSizeBytes for backup only
+exists in eu-west-1. would've sat at INSUFFICIENT_DATA forever, silently
+broken, no error at apply time to catch it. added the provider line.
+
+also caught both alarms missing tags — same FR12 gap i already hit once
+on the IAM policy. added tags to both.
+
+used the same threshold for both buckets instead of giving backup its own
+higher number. backup could arguably justify a higher threshold given the
+divergence reasoning above, but not worth a second variable + ADR for a
+project this size on this timebox — noted as a talking point instead of
+implementing it.
+
+currently here — alarm applied, waiting to confirm it flips to OK once
+the first daily metric lands.
+
+### Slice 3 — Recovery script
+not started.
+
+### Slice 4 — Replication check script
+not started.
