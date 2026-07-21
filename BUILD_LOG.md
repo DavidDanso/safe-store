@@ -129,7 +129,37 @@ currently here — alarm applied, waiting to confirm it flips to OK once
 the first daily metric lands.
 
 ### Slice 3 — Recovery script
-not started.
+
+wrote recover.py — upload, delete, head_object check, list versions, find
+delete marker, delete the marker to restore, verify restored file matches
+original, cleanup.
+
+hit AccessDenied on the very first put_object call. same root cause as
+day 1's console upload — script wasn't sending the
+x-amz-server-side-encryption header, my policy denies any PutObject
+without it. third time hitting this exact issue now (CLI, console, boto3),
+starting to just expect it by default whenever i write a new client
+against this bucket. added ServerSideEncryption='AES256' to the call,
+fixed.
+
+before running it for real, went back through the version-lookup logic
+and found a real bug — was grabbing delete_markers[0] and assuming it's
+the current one. works fine on a clean run, but if a previous test left
+the bucket messy (partial failure, cleanup never ran), there could be
+multiple delete markers and [0] isn't guaranteed to be the active one.
+switched to filtering on IsLatest instead, since that's the actual flag
+S3 uses to mark what's current — don't want to trust list order.
+
+also tightened the Prefix=KEY_NAME matches — Prefix does partial matching,
+not exact, so added an explicit key == KEY_NAME filter on top. harmless
+right now since the filename's fixed and nothing else in the bucket
+shares that prefix, but wanted it defensive in case this script ever gets
+reused with a dynamic filename later.
+
+ran it after the fixes. upload → delete → confirmed 404 → found the
+current delete marker → deleted the marker → confirmed restored → size
+and content both matched the original → cleanup ran, bucket left clean.
+full pass, real output, not assumed.
 
 ### Slice 4 — Replication check script
 not started.
