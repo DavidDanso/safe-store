@@ -115,7 +115,6 @@ resource "aws_s3_bucket_public_access_block" "safestore_logs_backup" {
   restrict_public_buckets = true
 }
 
-
 # Replication Configuration
 resource "aws_s3_bucket_replication_configuration" "replication" {
   bucket = aws_s3_bucket.safestore_primary.id
