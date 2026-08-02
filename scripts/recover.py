@@ -1,6 +1,7 @@
 import sys
 import boto3
 from botocore.exceptions import ClientError
+import mimetypes
 
 PRIMARY_BUCKET_NAME = "safestore-primary-649655225479-us-east-1"
 KEY_NAME = "recovery_test_file.bin"
@@ -15,11 +16,15 @@ def test_recovery():
     # ServerSideEncryption is required here — the bucket policy denies any
     # PutObject that doesn't explicitly include this header.
     print(f"1. Uploading test file: {KEY_NAME}...")
+    content_type, _ = mimetypes.guess_type(KEY_NAME)
+    if not content_type:
+        content_type = 'application/octet-stream'
     s3_client.put_object(
         Bucket=PRIMARY_BUCKET_NAME,
         Key=KEY_NAME,
         Body=FILE_CONTENT,
-        ServerSideEncryption='AES256'
+        ServerSideEncryption='AES256',
+        ContentType=content_type
     )
     print("Upload successful.")
 
