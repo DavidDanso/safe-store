@@ -120,22 +120,6 @@ resource "aws_s3_bucket_policy" "safestore_logs" {
             ]
           }
         }
-      },
-      {
-        Sid       = "DenyWriteExceptLoggingService"
-        Effect    = "Deny"
-        Principal = "*"
-        Action = [
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:DeleteObjectVersion"
-        ]
-        Resource = "${aws_s3_bucket.safestore_logs.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "aws:PrincipalServiceName" = "logging.s3.amazonaws.com"
-          }
-        }
       }
     ]
   })
@@ -178,22 +162,6 @@ resource "aws_s3_bucket_policy" "safestore_logs_backup" {
           }
           ArnLike = {
             "aws:SourceArn" = aws_s3_bucket.safestore_backup.arn
-          }
-        }
-      },
-      {
-        Sid       = "DenyWriteExceptLoggingService"
-        Effect    = "Deny"
-        Principal = "*"
-        Action = [
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:DeleteObjectVersion"
-        ]
-        Resource = "${aws_s3_bucket.safestore_logs_backup.arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "aws:PrincipalServiceName" = "logging.s3.amazonaws.com"
           }
         }
       }
