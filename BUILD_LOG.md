@@ -4,162 +4,97 @@ Log of all terraform runs and deployment activities.
 
 ## Day 1 — Primary Bucket
 
-versioning/encryption/PAB — no issues, straight in.
-
-policy took longer than it should have. ran the http deny test, expected
-AccessDenied, got a successful upload instead. spent like 10 min confused
-before noticing my Resource array on EnforceHTTPS only had the bucket arn,
-not the /* object arn too. added it, retested, denied. ok.
-
-encryption header deny — fine first try.
-
-uploaded test file, head-object shows ServerSideEncryption: AES256. good.
-
-console upload test (separate from CLI test above): tried uploading
-aws-cert.png through the S3 console normally, got Access denied. turned out
-the console's default upload doesn't send the x-amz-server-side-encryption
-header — it relies on the bucket's default encryption instead, which my
-policy doesn't check for, only the header in the request itself. fix: in
-the upload screen, Properties > Server-side encryption settings > switch
-from "use bucket default" to "override" > SSE-S3. re-uploaded, worked.
-good real-world proof of the tradeoff from choosing the strict header-check
-policy over relying on default encryption alone.
+- versioning/encryption/PAB: no issues.
+- HTTP deny test failed first try — Resource ARN was missing the /* object
+  ARN, only had the bucket ARN. added it, fixed.
+- encryption header deny: fine first try.
+- confirmed SSE-S3 via head-object.
+- console upload separately failed — console doesn't send the encryption
+  header by default. fixed by switching to "override encryption" in the
+  upload UI.
 
 
 ## Day 2 — Backup Bucket & Replication
 
-rough day.
-
-replication config #1: InvalidRequest, DeleteMarkerReplication must be
-specified. didn't know this was mandatory even to disable it. added
-delete_marker_replication { status = "Disabled" }. matches ADR-001 anyway
-so not a real change, just had to make it explicit in code.
-
-logging: CrossLocationLoggingProhibitted. did not know logs bucket has to
-be same-region as whatever it's logging. original plan (one logs bucket)
-doesn't work. had to decide — drop backup logging entirely (it's a SHOULD
-not MUST) or spin up a second logs bucket in eu-west-1. went with the
-second bucket, didn't like the idea of backup being a total blind spot.
--> ADR-004
-
-replication config #2, different error this time: MissingRequestBodyError,
-empty request body. this one was annoying because nothing looked wrong.
-turned out to be a race — versioning wasn't fully done propagating before
-replication config got sent, since everything was in the same apply. added
-depends_on for both versioning resources. fixed.
-
-apply finally clean.
-
-didn't trust "apply succeeded" = replication actually works, so tested for
-real: put-object to primary w/ sse flag, waited ~3 min, head-object on
-backup for the same key. it was there. confirmed, not assumed.
+- replication attempt #1: InvalidRequest, DeleteMarkerReplication must be
+  set explicitly (even to disable). added it — matches ADR-001.
+- logging failed: CrossLocationLoggingProhibited. logs bucket must be
+  same-region as what it's logging. single shared logs bucket doesn't
+  work. added a second logs bucket in eu-west-1. → ADR-004.
+- replication attempt #2: MissingRequestBodyError. root cause: versioning
+  wasn't fully propagated before replication config was sent, since it
+  was all in one apply. fixed with depends_on on both versioning
+  resources.
+- apply succeeded. verified for real — uploaded to primary, waited,
+  confirmed the file in backup via head-object.
 
 
 ## Day 3 — Lifecycle, Alarm & Scripts
 
-### Slice 1 — Lifecycle rules
+### Slice 1 — Lifecycle
 
-wrote two separate rules for primary (noncurrent version expiration +
-delete marker cleanup) instead of jamming both into one rule — id on a
-combined rule would've been misleading, and AWS evaluates them the same
-either way so no reason to combine.
+- two separate rules on primary (noncurrent version expiry + delete
+  marker cleanup).
+- caught backup missing the delete-marker rule — FR7 needs both rules on
+  both buckets. added it.
+- caught backup's policy only blocked PutObject, not Delete actions.
+  hardened it to deny PutObject/DeleteObject/DeleteObjectVersion.
+- same gap on the logs bucket — could upload directly myself. added a
+  deny-except-logging-service statement. confirmed the missing-key
+  behavior of StringNotEquals against AWS docs before trusting it.
+- live test with a real 3MB file, lifecycle timers dropped to 1 day
+  temporarily. upload/encrypt/replicate/delete/restore all worked.
+- tried manually deleting the test file from backup — denied by my own
+  policy, as expected. left it, lifecycle will clean it up.
+- timers still on 1 day — need to revert to 30/90 before Day 4.
 
-caught myself missing the delete-marker rule on backup — only had
-noncurrent version expiration there. FR7 says both rules on both buckets,
-not just primary. added it.
-
-while looking at backup's lockdown, realized the policy only denied
-PutObject, not DeleteObject/DeleteObjectVersion. if backup's supposed to
-be fully read-only, someone could still delete straight from it and leave
-a delete marker sitting there forever with nothing cleaning it up.
-hardened the policy to deny all three write-type actions, not just
-PutObject.
-
-same thing occurred to me about the logs bucket — nothing was stopping me
-from uploading straight into it myself. added a deny statement blocking
-everyone except the logging service, same idea as backup's lockout but
-using aws:PrincipalServiceName since the trusted party here is a service,
-not a role. double-checked the negated-operator behavior before trusting
-it — StringNotEquals with a missing key evaluates true (denies), which is
-what you want, confirmed against AWS docs since this isn't obvious.
-
-did a live test with real data before starting the scripts — 3mb file
-instead of the kb-sized synthetic ones. dropped lifecycle timers to 1 day
-temporarily so i wasn't waiting a month to see cleanup actually happen.
-upload, encryption check, replication check, delete + verify delete
-marker — all fine.
-
-tried cleaning the test file out of backup afterward through the console,
-got denied — DeleteObjectVersion, explicit deny, resource policy. took a
-second to realize that's my own hardened policy doing exactly what it's
-supposed to, not a bug. left the file, lifecycle will clean it up once
-timers are back to normal.
-
-lifecycle timers still on 1 day — need to flip back to 30/90 before Day 4.
+**Logs bucket hardening broke log delivery — biggest issue of the day**
+- after adding the deny-except-logging-service statement, logs stopped
+  showing up entirely. checked everything: bucket policy live and
+  correct, get-bucket-logging confirmed enabled on both source buckets,
+  generated fresh test traffic, waited 6+ hours. still nothing.
+- root cause: the hardening statement itself. S3's internal log delivery
+  likely doesn't set aws:PrincipalServiceName the way a normal service
+  call would — so the negated condition treated the missing key as "deny"
+  and silently blocked every delivery attempt, no error anywhere.
+  confirmed by AWS's own troubleshooting docs, which explicitly list
+  "check for Deny statements" as a known cause.
+- removed the statement from both logs bucket policies. logs started
+  showing up immediately after.
+- decided to leave it removed rather than tighten it further — the only
+  identity that could exploit it is my own IAM user, who already has
+  full account access, so the statement wasn't real protection. it had
+  already caused a real outage on the one thing the bucket exists to do.
+  logged as a deliberate tradeoff.
 
 ### Slice 2 — CloudWatch alarm
 
-primary alarm straightforward, 1GB threshold, way above anything test
-files will hit.
-
-added one for backup too, even though PRD only asked for primary.
-reasoning: delete markers aren't replicated (ADR-001), so backup can hold
-onto stuff primary's already cleaned up — sizes can diverge over time,
-so primary-only monitoring could miss something abnormal happening
-specifically on backup. free to add, so did it. worth a line in an ADR
-since it's extending scope on purpose, not just extra effort for its own
-sake.
-
-caught a bug before applying — backup alarm had no provider = aws.backup
-set, so it would've been created in the wrong region entirely.
-CloudWatch metrics are regional, and BucketSizeBytes for backup only
-exists in eu-west-1. would've sat at INSUFFICIENT_DATA forever, silently
-broken, no error at apply time to catch it. added the provider line.
-
-also caught both alarms missing tags — same FR12 gap i already hit once
-on the IAM policy. added tags to both.
-
-used the same threshold for both buckets instead of giving backup its own
-higher number. backup could arguably justify a higher threshold given the
-divergence reasoning above, but not worth a second variable + ADR for a
-project this size on this timebox — noted as a talking point instead of
-implementing it.
-
-currently here — alarm applied, waiting to confirm it flips to OK once
-the first daily metric lands.
+- primary alarm, 1GB threshold.
+- added one for backup too (not required by PRD) — delete markers aren't
+  replicated, so backup can hold more data than primary over time.
+- caught a bug before applying — backup alarm had no provider =
+  aws.backup, would've silently watched the wrong region forever. fixed.
+- caught both alarms missing tags (same FR12 gap as before). fixed.
+- same threshold on both buckets — noted as a talking point, not worth a
+  second variable for this project's scope.
+- waiting to confirm state flips to OK on the first daily metric.
 
 ### Slice 3 — Recovery script
 
-wrote recover.py — upload, delete, head_object check, list versions, find
-delete marker, delete the marker to restore, verify restored file matches
-original, cleanup.
-
-hit AccessDenied on the very first put_object call. same root cause as
-day 1's console upload — script wasn't sending the
-x-amz-server-side-encryption header, my policy denies any PutObject
-without it. third time hitting this exact issue now (CLI, console, boto3),
-starting to just expect it by default whenever i write a new client
-against this bucket. added ServerSideEncryption='AES256' to the call,
-fixed.
-
-before running it for real, went back through the version-lookup logic
-and found a real bug — was grabbing delete_markers[0] and assuming it's
-the current one. works fine on a clean run, but if a previous test left
-the bucket messy (partial failure, cleanup never ran), there could be
-multiple delete markers and [0] isn't guaranteed to be the active one.
-switched to filtering on IsLatest instead, since that's the actual flag
-S3 uses to mark what's current — don't want to trust list order.
-
-also tightened the Prefix=KEY_NAME matches — Prefix does partial matching,
-not exact, so added an explicit key == KEY_NAME filter on top. harmless
-right now since the filename's fixed and nothing else in the bucket
-shares that prefix, but wanted it defensive in case this script ever gets
-reused with a dynamic filename later.
-
-ran it after the fixes. upload → delete → confirmed 404 → found the
-current delete marker → deleted the marker → confirmed restored → size
-and content both matched the original → cleanup ran, bucket left clean.
-full pass, real output, not assumed.
+- wrote recover.py: upload → delete → confirm gone → find delete marker
+  → delete marker to restore → verify match → cleanup.
+- first run: AccessDenied on put_object — missing the encryption header
+  again. third time hitting this exact issue (CLI, console, boto3 now).
+  fixed with ServerSideEncryption='AES256'.
+- caught a real bug before running for real — was grabbing
+  delete_markers[0], not guaranteed to be the current one if a past run
+  left extra markers behind. switched to filtering on IsLatest.
+- tightened Prefix matches with an explicit key == KEY_NAME filter —
+  harmless now, defensive if this script is ever reused with a dynamic
+  filename.
+- ran clean after fixes: full pass, real output — upload, delete, 404
+  confirmed, marker found and removed, restore confirmed, size + content
+  matched, cleanup left the bucket clean.
 
 ### Slice 4 — Replication check script
 not started.
