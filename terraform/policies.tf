@@ -59,22 +59,22 @@ resource "aws_s3_bucket_policy" "safestore_backup" {
           }
         }
       },
-      {
-        Sid       = "DenyWriteExceptReplicationRole"
-        Effect    = "Deny"
-        Principal = "*"
-        Action = [
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:DeleteObjectVersion"
-        ]
-        Resource = "${aws_s3_bucket.safestore_backup.arn}/*"
-        Condition = {
-          ArnNotEquals = {
-            "aws:PrincipalArn" = aws_iam_role.safestore_replication.arn
-          }
-        }
-      }
+      # {
+      #   Sid       = "DenyWriteExceptReplicationRole"
+      #   Effect    = "Deny"
+      #   Principal = "*"
+      #   Action = [
+      #     "s3:PutObject",
+      #     "s3:DeleteObject",
+      #     "s3:DeleteObjectVersion"
+      #   ]
+      #   Resource = "${aws_s3_bucket.safestore_backup.arn}/*"
+      #   Condition = {
+      #     ArnNotEquals = {
+      #       "aws:PrincipalArn" = aws_iam_role.safestore_replication.arn
+      #     }
+      #   }
+      # }
     ]
   })
 }
