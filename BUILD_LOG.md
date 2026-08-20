@@ -68,14 +68,10 @@ Log of all terraform runs and deployment activities.
 - primary alarm, 1GB threshold. added one for backup too (not required
   by PRD) — delete markers aren't replicated, so backup can hold more
   data than primary over time, sizes can diverge.
-- caught a bug before applying — backup alarm had no provider =
-  aws.backup, would've silently watched the wrong region forever. fixed.
-- caught both alarms missing tags (same FR12 gap as before). fixed.
-- same threshold on both buckets — noted as a talking point, not worth a
-  second variable for this project's scope.
 - showed INSUFFICIENT_DATA for a while — expected, this metric only
   reports once a day. resolves on its own once the first data point
   lands.
+- The first data point was 1 hour late. Now showing OK.
 
 ### Slice 3 — Recovery script
 
