@@ -14,5 +14,6 @@ venv/
 
 *.txt
 *.bin
+*.py
 
 terraform.tfvars
