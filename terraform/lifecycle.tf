@@ -49,7 +49,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
   }
 }
 
-# Logs bucket lifecycle configuration
+# Primary Logs bucket lifecycle configuration
 resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs" {
   bucket = aws_s3_bucket.safestore_logs.id
 
