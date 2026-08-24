@@ -1,13 +1,19 @@
 # ADR-002: SSE-S3 vs SSE-KMS for Server-Side Encryption
 
 ## Context
-All data stored in SafeStore must be encrypted at rest. We must decide between Amazon S3-managed keys (SSE-S3) and AWS KMS-managed keys (SSE-KMS) to meet our security requirements while minimizing operational overhead and KMS costs.
+All objects in SafeStore need to be encrypted at rest. The choice was between
+letting S3 manage the key (SSE-S3) or managing my own key through KMS (SSE-KMS).
 
 ## Decision
-We decided to use Amazon S3-managed encryption keys (SSE-S3) as the default encryption mechanism for all three buckets.
+I went with SSE-S3 on all three buckets.
 
 ## Why
-SSE-S3 provides strong AES-256 encryption at rest without the additional complexity, policy management, and per-request costs associated with AWS Key Management Service (KMS). Since our recovery and validation scripts run in simple automated environments, avoiding cross-account and cross-region KMS key sharing reduces potential points of failure and access control complexity.
+SSE-S3 gives me AES-256 encryption at rest with no key management overhead and
+no per-request KMS charges. I don't have a requirement here for custom key
+rotation schedules or CloudTrail-level visibility into key usage. Adding KMS
+would add cost and complexity without solving any actual problem SafeStore has.
 
 ## Revisit if
-We would change this decision if security policies change to require customer-managed keys (CMKs) with custom key rotation schedules, or if envelope encryption with fine-grained KMS key policies becomes a mandatory compliance requirement.
+A compliance requirement comes in that mandates customer-managed keys with
+controlled rotation, or I need audit logs showing exactly who accessed which
+encryption key and when.

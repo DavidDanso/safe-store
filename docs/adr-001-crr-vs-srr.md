@@ -1,13 +1,19 @@
 # ADR-001: Cross-Region Replication (CRR) vs Same-Region Replication (SRR)
 
 ## Context
-We need to ensure that data stored in SafeStore is resilient to regional AWS outages and meets strict disaster recovery (DR) requirements for geographic redundancy. Same-Region Replication (SRR) only replicates data within the same region, leaving it vulnerable to region-wide failures.
+SafeStore's whole purpose is surviving a regional AWS outage. I had to decide
+whether to keep the backup in the same region or replicate it to a completely
+separate one.
 
 ## Decision
-We decided to implement S3 Cross-Region Replication (CRR) to replicate data from the primary region to a geographically distinct backup region.
+I went with Cross-Region Replication — primary in us-east-1, backup in eu-west-1.
 
 ## Why
-CRR provides compliance with disaster recovery regulations by guaranteeing that a copy of the data exists in a separate geographic location. This protects the data against regional failures, catastrophic events, and local compliance requirements. It also ensures lower-latency access to backups for users located in or near the backup region.
+SRR keeps both copies inside the same AWS region. If that region goes down,
+primary and backup go down together, which defeats the point of having a backup
+at all. CRR puts the backup in a separate geography so a single regional failure
+can't take out both at once.
 
 ## Revisit if
-We would change this decision if regulatory requirements change to prohibit data sovereignty transfer outside of the primary region, or if data transfer costs between regions become prohibitively expensive relative to the risk.
+A data sovereignty requirement forces everything to stay in one region, or
+cross-region transfer costs become a real concern at higher data volumes.

@@ -1,13 +1,21 @@
 # ADR-003: Delete Marker Replication
 
 ## Context
-When an object is deleted from a versioned bucket without specifying a version ID, S3 creates a delete marker. We must determine whether these delete markers should be replicated to the backup bucket, which impacts how file deletions and recovery behave across regions.
+When you delete a versioned S3 object without specifying a version ID, S3
+creates a delete marker rather than permanently removing anything. I had to
+decide whether those delete markers should replicate to the backup bucket.
 
 ## Decision
-We decided to disable Delete Marker Replication in the replication configuration of the primary bucket.
+I disabled delete marker replication.
 
 ## Why
-Disabling delete marker replication ensures that if an object is accidentally deleted in the primary bucket, the deletion is not mirrored to the backup bucket. This maintains the backup bucket as a more secure, independent recovery safety net, preventing accidental deletions from propagating across regions and protecting against destructive actions or operational mistakes.
+The backup bucket exists to be an independent recovery copy. If delete markers
+replicate, accidentally running `aws s3 rm --recursive` on the primary bucket
+causes the same deletion to appear in backup automatically. The backup stops
+being a safety net and starts mirroring the mistake. Keeping delete markers off
+replication means backup stays intact even if primary gets wiped.
 
 ## Revisit if
-We would change this decision if our operational workflows require strict real-time synchronization of the active file list between regions, and the risk of accidental deletion propagation is mitigated by other controls.
+I need both regions to stay in exact sync including deletions, and there are
+other controls in place that prevent accidental mass deletes from hitting
+primary in the first place.
