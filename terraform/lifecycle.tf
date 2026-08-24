@@ -21,6 +21,16 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_primary" {
       expired_object_delete_marker = true
     }
   }
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }
 
 # Backup bucket lifecycle configuration
@@ -34,7 +44,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
     filter {}
 
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days = 90
     }
   }
 
