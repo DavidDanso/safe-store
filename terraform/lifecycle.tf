@@ -8,7 +8,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_primary" {
     filter {}
 
     noncurrent_version_expiration {
-      noncurrent_days = 1
+      noncurrent_days = 30
     }
   }
 
@@ -34,7 +34,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_backup" {
     filter {}
 
     noncurrent_version_expiration {
-      noncurrent_days = 1
+      noncurrent_days = 30
     }
   }
 
@@ -59,7 +59,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs" {
     filter {}
 
     expiration {
-      days = 1
+      days = 90
     }
   }
 }
@@ -75,7 +75,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "safestore_logs_backup" {
     filter {}
 
     expiration {
-      days = 1
+      days = 90
     }
   }
 }
