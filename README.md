@@ -15,8 +15,6 @@ SafeStore is a Terraform-built S3 backup and recovery system that makes accident
 - [Testing](#testing)
 - [Cost](#cost)
 - [Teardown](#teardown)
-- [Known Issues / Open Items](#known-issues--open-items)
-- [License](#license)
 
 ## Problem Statement
 
@@ -62,7 +60,7 @@ SafeStore provisions infrastructure across two AWS regions: `us-east-1` (primary
 
 1. Clone the repository:
 ```bash
-git clone <TODO: fill in>
+git clone https://github.com/DavidDanso/safe-store.git
 cd safestore
 ```
 
@@ -102,9 +100,8 @@ python3 ../scripts/check_replication.py
 /terraform        → all infrastructure code
 /scripts          → recover.py, check_replication.py
 /docs             → ADR.md (architecture decision records)
-architecture.svg  → architecture diagram (add to repo root)
-BUILD_LOG.md      → raw log of what broke and how it was fixed
-TEST_RESULTS.md   → PRD test case results with evidence
+BUILD_LOG.md      → raw log of what broke and how I fixed it
+TEST_RESULTS.md   → Test case results with evidence
 ```
 
 ## Usage
@@ -134,27 +131,20 @@ python3 scripts/check_replication.py
 3. Checks `ReplicationStatus` metadata on the primary object.
 4. Reports pass/fail.
 
-> See [Known Issues / Open Items](#known-issues--open-items) — this script has not yet completed a successful run.
-
 ## Key Design Decisions
 
-| Decision | Selection | Rationale | Record |
-|---|---|---|---|
-| Delete Marker Replication | Disabled | Prevents an accidental deletion on primary from also wiping the backup copy. | [ADR-001](./docs/ADR.md) |
-| Replication Strategy | Cross-Region Replication (CRR) | Same-Region Replication can't guarantee recovery if the primary region has an outage. | [ADR-002](./docs/ADR.md) |
-| Retroactive Replication | Excluded | S3 replication doesn't backfill pre-existing objects by default; that requires a separate batch operation. | [ADR-003](./docs/ADR.md) |
-| Logging Architecture | Two regional log buckets | AWS requires access-log target buckets to be in the same region as the source bucket. | [ADR-004](./docs/ADR.md) |
-| Encryption Provider | SSE-S3 (AES256) | Avoids KMS key management cost and overhead; no requirement here for key rotation control or usage auditing. | — |
-| Storage Monitoring | Alarm on both primary and backup | Delete markers aren't replicated, so backup can diverge in size from primary over time — primary-only monitoring could miss abnormal growth specific to backup. | — |
+| Decision | Selection | Rationale |
+|---|---|---|
+| Delete Marker Replication | Disabled | Prevents an accidental deletion on primary from also wiping the backup copy. |
+| Replication Strategy | Cross-Region Replication (CRR) | Same-Region Replication can't guarantee recovery if the primary region has an outage. |
+| Retroactive Replication | Excluded | S3 replication doesn't backfill pre-existing objects by default; that requires a separate batch operation. |
+| Logging Architecture | Two regional log buckets | AWS requires access-log target buckets to be in the same region as the source bucket. |
+| Encryption Provider | SSE-S3 (AES256) | Avoids KMS key management cost and overhead; no requirement here for key rotation control or usage auditing. |
+| Storage Monitoring | Alarm on both primary and backup | Delete markers aren't replicated, so backup can diverge in size from primary over time — primary-only monitoring could miss abnormal growth specific to backup. |
 
 ## Testing
 
 Full evidence recorded in [TEST_RESULTS.md](./TEST_RESULTS.md). Day-by-day build history — real errors and how they were fixed — is in [BUILD_LOG.md](./BUILD_LOG.md).
-
-- **8 of 10** PRD test cases confirmed PASS, backed by real CLI output, script runs, or console verification.
-- **2 not yet verified**:
-  - SSE-S3 encryption on a replicated object, checked directly on the backup bucket.
-  - Confirming an object uploaded before replication was configured is genuinely absent from backup.
 
 ## Cost
 
@@ -172,16 +162,14 @@ terraform destroy
 ```
 
 2. Confirm nothing was left behind:
-   - `aws s3 ls` — confirm all 5 buckets (primary, backup, primary logs, backup logs, and any leftover test buckets) are gone.
+   - `aws s3 ls` — confirm all 4 buckets (primary, backup, primary logs, backup logs) are gone.
    - IAM console — confirm `safestore-replication-role` is gone.
    - CloudWatch, in both `us-east-1` and `eu-west-1` — confirm the `BucketSizeBytes` alarms are gone.
 
-## Known Issues / Open Items
 
-- [`scripts/check_replication.py`](./scripts/check_replication.py) — the region bug is fixed (`region_name='eu-west-1'` now set explicitly on the backup client) and retry margin widened from 150s to 200s. Not yet re-run against real infrastructure to confirm a clean pass — update this line once it has been.
-- Two PRD test cases (backup object encryption, no-backfill behavior) are pending direct verification. Commands to run are in [TEST_RESULTS.md](./TEST_RESULTS.md).
-- Resource tagging convention: `Project=SafeStore`, `Environment=test`.
+## Author
+David Danso - Initial work - [GitHub Profile](https://github.com/DavidDanso)
 
-## License
+##### Email: davidkellybrownson@gmail.com
 
-MIT — see [LICENSE](./LICENSE).
+### Happy Coding!
