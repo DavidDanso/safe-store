@@ -168,4 +168,4 @@ terraform destroy
 
 
 ## Author
-David Danso - Initial work - [GitHub Profile](https://github.com/DavidDanso)
+David Kofi Danso
