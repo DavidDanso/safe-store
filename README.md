@@ -29,9 +29,6 @@ A developer ran `aws s3 rm --recursive` on the wrong folder. No versioning or ba
     <td width="100%">      
     &nbsp; 
     <br>
-    <p align="center">
-     Architecture
-    </p>
     <img src="https://github.com/DavidDanso/safe-store/blob/main/docs/architecture.png" />
     </td> 
   </tr>
