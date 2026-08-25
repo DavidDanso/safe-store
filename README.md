@@ -2,6 +2,22 @@
 
 SafeStore is a Terraform-built S3 backup and recovery system that makes accidental deletion recoverable in minutes and survives a full regional AWS outage.
 
+## Contents
+
+- [Problem Statement](#problem-statement)
+- [Architecture](#architecture)
+- [What This Does NOT Do](#what-this-does-not-do)
+- [Prerequisites](#prerequisites)
+- [Setup / Deployment](#setup--deployment)
+- [Repository Structure](#repository-structure)
+- [Usage](#usage)
+- [Key Design Decisions](#key-design-decisions)
+- [Testing](#testing)
+- [Cost](#cost)
+- [Teardown](#teardown)
+- [Known Issues / Open Items](#known-issues--open-items)
+- [License](#license)
+
 ## Problem Statement
 
 A developer ran `aws s3 rm --recursive` on the wrong folder. No versioning or backup existed, and the data was permanently lost. SafeStore was built by David Danso (David Danso Cloud Labs) to make that specific failure mode recoverable.
@@ -9,39 +25,42 @@ A developer ran `aws s3 rm --recursive` on the wrong folder. No versioning or ba
 ## Architecture
 
 ![Architecture](./architecture.svg)
-<!-- Note: architecture.svg should be added to the repo root -->
 
 SafeStore provisions infrastructure across two AWS regions: `us-east-1` (primary) and `eu-west-1` (backup).
 
-- **Primary Bucket (`safestore-primary-<account-id>-us-east-1`)**: Deployed in `us-east-1` with versioning enabled, SSE-S3 encryption (AES256) enforced, and all Public Access Block settings enabled.
-- **Backup Bucket (`safestore-backup-<account-id>-eu-west-1`)**: Deployed in `eu-west-1` with versioning enabled, SSE-S3 encryption enforced, and Public Access Block settings enabled. Bucket policy denies non-HTTPS requests and blocks `PutObject`, `DeleteObject`, and `DeleteObjectVersion` for all principals except the replication role.
-- **Primary Logs Bucket (`safestore-logs-primary-<account-id>-us-east-1`)**: Receives S3 server access logs for the primary bucket in `us-east-1`.
-- **Backup Logs Bucket (`safestore-logs-backup-<account-id>-eu-west-1`)**: Receives S3 server access logs for the backup bucket in `eu-west-1`. Two separate log buckets are required because AWS requires access-log delivery to remain in the same region as the source bucket.
-- **Replication Flow**: One-way asynchronous Cross-Region Replication (CRR) replicates objects from primary to backup. An IAM role (`safestore-replication-role`) assumed by `s3.amazonaws.com` handles replication.
+- **Primary Bucket** (`safestore-primary-<account-id>-us-east-1`): versioning enabled, SSE-S3 encryption (AES256) enforced, all Public Access Block settings enabled.
+- **Backup Bucket** (`safestore-backup-<account-id>-eu-west-1`): versioning enabled, SSE-S3 encryption enforced, Public Access Block enabled. Bucket policy denies non-HTTPS requests and blocks `PutObject`, `DeleteObject`, and `DeleteObjectVersion` for all principals except the replication role.
+- **Primary Logs Bucket** (`safestore-logs-primary-<account-id>-us-east-1`): receives S3 server access logs for the primary bucket.
+- **Backup Logs Bucket** (`safestore-logs-backup-<account-id>-eu-west-1`): receives S3 server access logs for the backup bucket. Two separate log buckets are required because AWS requires access-log delivery to remain in the same region as the source bucket.
+- **Replication**: one-way asynchronous Cross-Region Replication (CRR) from primary to backup, authorized by a dedicated IAM role (`safestore-replication-role`) that only `s3.amazonaws.com` can assume.
+- **Lifecycle Management**: primary and backup automatically expire noncurrent versions after 30 days and clean up delete markers once nothing is left beneath them. Both logs buckets expire objects after 90 days. Nothing accumulates indefinitely.
+- **Monitoring**: a CloudWatch alarm watches `BucketSizeBytes` on primary, and — beyond what was originally required — a second alarm watches backup too, since delete markers aren't replicated and backup can grow independently of primary over time. This metric is reported by AWS once per day, not continuously.
 
 ## What This Does NOT Do
 
-- **Does not backfill existing objects**: Objects uploaded before replication was configured are not automatically replicated to the backup bucket.
-- **Does not replicate delete markers**: Deleting an object in the primary bucket creates a delete marker locally, but the deletion does not propagate to the backup bucket.
-- **Does not consolidate logs into a single bucket**: AWS restricts S3 server access logging to target buckets in the same region as the source bucket.
-- **Does not alert in real time on storage metrics**: CloudWatch reports S3 `BucketSizeBytes` metrics once per day.
+- **Does not backfill existing objects** — objects uploaded before replication was configured are not automatically replicated to backup.
+- **Does not replicate delete markers** — deleting an object in primary creates a delete marker locally; that deletion does not propagate to backup.
+- **Does not consolidate logs into a single bucket** — AWS requires access-log target buckets to be in the same region as the source bucket.
+- **Does not alert in real time** — CloudWatch reports S3 `BucketSizeBytes` once per day, not continuously.
 
 ## Prerequisites
 
+- AWS account with access to `us-east-1` and `eu-west-1`
+- A dedicated IAM user for deployment — not root — with MFA enabled
 - AWS CLI installed and configured
 - Terraform (AWS provider `hashicorp/aws ~> 6.0`)
-- Python 3.x with Boto3 package (`pip install boto3`)
-- AWS IAM permissions to create S3 buckets, IAM roles/policies, and CloudWatch alarms
+- Python 3.x with Boto3 (`pip install boto3`)
+- IAM permissions to create S3 buckets, IAM roles/policies, and CloudWatch alarms
 
 ## Setup / Deployment
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/DavidDanso/safe-store.git
+git clone <TODO: fill in>
 cd safestore
 ```
 
-2. Create a `terraform.tfvars` file in `[terraform/](./terraform)`:
+2. Create a `terraform.tfvars` file in [`terraform/`](./terraform):
 ```hcl
 account_id         = "YOUR_ACCOUNT_ID_HERE"
 primary_region     = "us-east-1"
@@ -55,12 +74,12 @@ cd terraform
 terraform init
 ```
 
-4. Run plan to verify resource creation:
+4. Review the plan:
 ```bash
 terraform plan
 ```
 
-5. Apply the infrastructure:
+5. Apply:
 ```bash
 terraform apply
 ```
@@ -74,7 +93,7 @@ python3 ../scripts/check_replication.py
 ## Repository Structure
 
 ```
-/terraform       → all infrastructure code
+/terraform        → all infrastructure code
 /scripts          → recover.py, check_replication.py
 /docs             → ADR.md (architecture decision records)
 architecture.svg  → architecture diagram (add to repo root)
@@ -82,70 +101,63 @@ BUILD_LOG.md      → raw log of what broke and how it was fixed
 TEST_RESULTS.md   → PRD test case results with evidence
 ```
 
-- Infrastructure code: `[terraform/](./terraform)`
-- Verification scripts: `[scripts/recover.py](./scripts/recover.py)` and `[scripts/check_replication.py](./scripts/check_replication.py)`
-- Architecture Decision Records: `[ADR.md](./docs/ADR.md)`
-- Build log: `[BUILD_LOG.md](./BUILD_LOG.md)`
-- Test results: `[TEST_RESULTS.md](./TEST_RESULTS.md)`
-
 ## Usage
 
-### Recovery Verification Script (`scripts/recover.py`)
+### Recovery Verification — [`scripts/recover.py`](./scripts/recover.py)
 
-Run the script to verify deletion recovery:
 ```bash
 python3 scripts/recover.py
 ```
 
-Script execution sequence:
 1. Uploads a test object to the primary bucket.
-2. Deletes the object to generate a delete marker.
-3. Confirms the object returns a 404/missing status via `head_object`.
-4. Queries object versions and locates the current delete marker using `IsLatest`.
-5. Deletes the delete marker using its specific `VersionId`.
-6. Verifies the object is restored and matches the original size and content.
-7. Deletes test object versions to leave the bucket clean.
+2. Deletes the object, creating a delete marker.
+3. Confirms the object returns 404 via `head_object`.
+4. Finds the current delete marker via `IsLatest`.
+5. Deletes the delete marker by its `VersionId`, restoring the object.
+6. Verifies the restored object matches the original size and content.
+7. Cleans up test versions, leaving the bucket clean.
 
-### Replication Verification Script (`scripts/check_replication.py`)
+### Replication Verification — [`scripts/check_replication.py`](./scripts/check_replication.py)
 
-Run the script to check replication state:
 ```bash
 python3 scripts/check_replication.py
 ```
 
-Script execution sequence:
-1. Uploads a uniquely-named test object to the primary bucket.
+1. Uploads a uniquely-named test object to primary.
 2. Polls the backup bucket until the object appears.
 3. Checks `ReplicationStatus` metadata on the primary object.
-4. Reports pass/fail status.
+4. Reports pass/fail.
 
-*(Note: See [Known issues / open items](#known-issues--open-items) regarding current execution status.)*
+> See [Known Issues / Open Items](#known-issues--open-items) — this script has not yet completed a successful run.
 
 ## Key Design Decisions
 
 | Decision | Selection | Rationale | Record |
 |---|---|---|---|
-| Delete Marker Replication | Disabled | Prevents an accidental deletion on the primary bucket from wiping the copy on the backup bucket. | `[ADR-001](./docs/ADR.md)` |
-| Replication Strategy | Cross-Region Replication (CRR) | Same-Region Replication (SRR) cannot guarantee recovery if the primary AWS region experiences an outage. | `[ADR-002](./docs/ADR.md)` |
-| Retroactive Replication | Excluded | S3 replication does not backfill pre-existing objects; backfilling requires separate batch operations. | `[ADR-003](./docs/ADR.md)` |
-| Logging Architecture | Two regional log buckets | AWS rules require access logging target buckets to reside in the same region as the source bucket. | `[ADR-004](./docs/ADR.md)` |
-| Encryption Provider | SSE-S3 (AES256) | Avoids KMS key management fees and policy overhead since customer key rotation auditing was not required. | N/A |
+| Delete Marker Replication | Disabled | Prevents an accidental deletion on primary from also wiping the backup copy. | [ADR-001](./docs/ADR.md) |
+| Replication Strategy | Cross-Region Replication (CRR) | Same-Region Replication can't guarantee recovery if the primary region has an outage. | [ADR-002](./docs/ADR.md) |
+| Retroactive Replication | Excluded | S3 replication doesn't backfill pre-existing objects by default; that requires a separate batch operation. | [ADR-003](./docs/ADR.md) |
+| Logging Architecture | Two regional log buckets | AWS requires access-log target buckets to be in the same region as the source bucket. | [ADR-004](./docs/ADR.md) |
+| Encryption Provider | SSE-S3 (AES256) | Avoids KMS key management cost and overhead; no requirement here for key rotation control or usage auditing. | — |
+| Storage Monitoring | Alarm on both primary and backup | Delete markers aren't replicated, so backup can diverge in size from primary over time — primary-only monitoring could miss abnormal growth specific to backup. | — |
 
 ## Testing
 
-Test details and evidence are recorded in `[TEST_RESULTS.md](./TEST_RESULTS.md)`.
+Full evidence recorded in [TEST_RESULTS.md](./TEST_RESULTS.md). Day-by-day build history — real errors and how they were fixed — is in [BUILD_LOG.md](./BUILD_LOG.md).
 
-- **Confirmed PASS**: 8 of 10 PRD test cases verified using CLI output, script executions, or console inspection.
-- **Unverified Test Cases (2 total)**:
-  - Direct verification of SSE-S3 encryption header on a replicated object inside the backup bucket.
-  - Direct verification that an object uploaded prior to replication configuration remains absent from the backup bucket.
+- **8 of 10** PRD test cases confirmed PASS, backed by real CLI output, script runs, or console verification.
+- **2 not yet verified**:
+  - SSE-S3 encryption on a replicated object, checked directly on the backup bucket.
+  - Confirming an object uploaded before replication was configured is genuinely absent from backup.
 
 ## Cost
 
-- **Budget Ceiling**: $0.05 total AWS spend.
-- **Confirmation**: Verified in AWS Cost Explorer filtered by tag `Project=SafeStore`.
+- Budget ceiling: **$0.05** total AWS spend.
+- Confirmed via Cost Explorer, filtered by tag `Project=SafeStore`.
 
 ## Teardown
+
+No KMS key exists in this project, so there's no ongoing charge either way — safe to leave running for demos or tear down immediately.
 
 1. Destroy all infrastructure:
 ```bash
@@ -153,17 +165,17 @@ cd terraform
 terraform destroy
 ```
 
-2. Confirm resource destruction:
-   - Run `aws s3 ls` to confirm all 5 buckets (`primary`, `backup`, `primary logs`, `backup logs`, and any temporary test buckets) are deleted.
-   - Check IAM in AWS Console to confirm `safestore-replication-role` is deleted.
-   - Check CloudWatch in `us-east-1` and `eu-west-1` to confirm `BucketSizeBytes` alarms are removed.
+2. Confirm nothing was left behind:
+   - `aws s3 ls` — confirm all 5 buckets (primary, backup, primary logs, backup logs, and any leftover test buckets) are gone.
+   - IAM console — confirm `safestore-replication-role` is gone.
+   - CloudWatch, in both `us-east-1` and `eu-west-1` — confirm the `BucketSizeBytes` alarms are gone.
 
 ## Known Issues / Open Items
 
-- `scripts/check_replication.py` contains a bug where both Boto3 clients default to the same region because `region_name` is not explicitly assigned to the backup client. The script has not yet completed a successful run.
-- Two PRD test cases (backup object encryption and no-backfill behavior) are pending direct verification.
-- Resource tagging: `Project=SafeStore`, `Environment=test`.
+- [`scripts/check_replication.py`](./scripts/check_replication.py) — the region bug is fixed (`region_name='eu-west-1'` now set explicitly on the backup client) and retry margin widened from 150s to 200s. Not yet re-run against real infrastructure to confirm a clean pass — update this line once it has been.
+- Two PRD test cases (backup object encryption, no-backfill behavior) are pending direct verification. Commands to run are in [TEST_RESULTS.md](./TEST_RESULTS.md).
+- Resource tagging convention: `Project=SafeStore`, `Environment=test`.
 
 ## License
 
-<TODO: add license>
+MIT — see [LICENSE](./LICENSE).
