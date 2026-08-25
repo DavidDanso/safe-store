@@ -24,7 +24,18 @@ A developer ran `aws s3 rm --recursive` on the wrong folder. No versioning or ba
 
 ## Architecture
 
-![Architecture](./architecture.svg)
+<table width="100%"> 
+  <tr>
+    <td width="100%">      
+    &nbsp; 
+    <br>
+    <p align="center">
+     Architecture
+    </p>
+    <img src="https://github.com/DavidDanso/safe-store/blob/main/docs/architecture.png" />
+    </td> 
+  </tr>
+</table>
 
 SafeStore provisions infrastructure across two AWS regions: `us-east-1` (primary) and `eu-west-1` (backup).
 
