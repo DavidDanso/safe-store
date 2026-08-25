@@ -144,7 +144,7 @@ python3 scripts/check_replication.py
 
 ## Testing
 
-Full evidence recorded in [TEST_RESULTS.md](./TEST_RESULTS.md). Day-by-day build history — real errors and how they were fixed — is in [BUILD_LOG.md](./BUILD_LOG.md).
+10 of 10 PRD test cases pass. recover.py and check_replication.py both run successfully against real infrastructure, with output confirming recovery and replication end-to-end. Full evidence recorded in TEST_RESULTS.md. Day-by-day build history — real errors and how they were fixed — is in BUILD_LOG.md.
 
 ## Cost
 
@@ -169,7 +169,3 @@ terraform destroy
 
 ## Author
 David Danso - Initial work - [GitHub Profile](https://github.com/DavidDanso)
-
-##### Email: davidkellybrownson@gmail.com
-
-### Happy Coding!
