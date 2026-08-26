@@ -15,4 +15,6 @@ venv/
 *.txt
 *.bin
 
+TEST_RESULTS.md
+
 terraform.tfvars
